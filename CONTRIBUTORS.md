@@ -4,7 +4,7 @@
 * @austinv11
 
 ## Co-developers
-* @grandmind
+* @GrandPanda
 * @chrislo27
 
 ## Contributors
