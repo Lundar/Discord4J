@@ -257,32 +257,38 @@ public class DiscordVoiceWS {
 	 * Sets up the thread for receiving audio packets from the Discord UDP Socket.
 	 */
 	private void setupReceiveThread() {
-		(new Thread((Runnable) () -> {
-                    while(true)
-			if (isConnected.get()) {
-				DatagramPacket receivedPacket = new DatagramPacket(new byte[1920], 1920);
-				try {
-					udpSocket.receive(receivedPacket); // This blocks the thread until a packet is received.
-                                        
-					AudioPacket packet = AudioPacket.fromUdpPacket(receivedPacket);
-					try {
-						packet = packet.decrypt(secret);
-					} catch (IllegalStateException e) {
-						Discord4J.LOGGER.error(LogMarkers.VOICE, "Unable to decrypt audio. Please report this to the Discord4J dev!", e);
-					}
-					IUser userSpeaking = userSSRCs.get(packet.getSsrc());
+                try{
+                        udpSocket.setSoTimeout(10000);//this should probably be elsewhere
+                }catch(SocketException ss){
+                        Discord4J.LOGGER.error(LogMarkers.VOICE_WEBSOCKET, "Discord Internal Exception", ss);
+                }
+                (new Thread((Runnable) () -> {
+                        while(isConnected.get()){
+                                DatagramPacket receivedPacket = new DatagramPacket(new byte[1920], 1920);
+                                try {
+                                        udpSocket.receive(receivedPacket); // This blocks the thread until a packet is received.
 
-					// We don't have a user associated with this user. This is probably the first time they have spoken since the bot/they joined. Ignore for now.
-					if (userSpeaking != null) {
-						byte[] decodedAudio = OpusUtil.decodeToPCM(packet.getEncodedAudio(), userSpeaking);
+                                        AudioPacket packet = AudioPacket.fromUdpPacket(receivedPacket);
+                                        try {
+                                                packet = packet.decrypt(secret);
+                                        } catch (IllegalStateException e) {
+                                                Discord4J.LOGGER.error(LogMarkers.VOICE, "Unable to decrypt audio. Please report this to the Discord4J dev!", e);
+                                        }
+                                        IUser userSpeaking = userSSRCs.get(packet.getSsrc());
 
-						((AudioManager) guild.getAudioManager()).receiveAudio(packet.getEncodedAudio(), decodedAudio, userSpeaking);
-					}
-				} catch (IOException e) {
-					Discord4J.LOGGER.error(LogMarkers.VOICE_WEBSOCKET, "Discord Internal Exception", e);
-				}
-			}
-		})).start();
+                                        // We don't have a user associated with this user. This is probably the first time they have spoken since the bot/they joined. Ignore for now.
+                                        if (userSpeaking != null) {
+                                                byte[] decodedAudio = OpusUtil.decodeToPCM(packet.getEncodedAudio(), userSpeaking);
+
+                                                ((AudioManager) guild.getAudioManager()).receiveAudio(packet.getEncodedAudio(), decodedAudio, userSpeaking);
+                                        }
+                                } catch (SocketTimeoutException st) {
+                                        //this might happen alot
+                                } catch (IOException e) {
+                                        Discord4J.LOGGER.error(LogMarkers.VOICE_WEBSOCKET, "Discord Internal Exception", e);
+                                }
+                        }
+                })).start();
 	}
 
 	/**
